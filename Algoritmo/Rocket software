@@ -1,0 +1,334 @@
+# rocket-embedded-electronics
+Departamento de eletrônica UFABC ROCKET DESIGN
+//Algoritmo em C++/Arduino baseado no sistema de eletrônica de um foguete modelo, desenvolvido para executar funções em vôo desde como leitura de sensores, 
+armazenamento de dados no SD, detecção do apogeu até o acionamente de parachute e a otimização do sistema de recuperação.
+
+
+
+#include <Adafruit_BMP085.h>
+#include <SPI.h>
+#include <SD.h>
+
+//============================================================
+
+const int ledPin =  LED_BUILTIN;        // the number of the LED pin
+const int chipSelect = 53;
+
+//The following constant is the number of milliseconds we wait to fire the parachute ejection.
+
+const long interval = 5000;  // interval at which to blink (milliseconds)
+const long interval_2 = 6000;  // interval at which to blink (milliseconds)
+
+File myFile;
+//=============================================================
+#define n 25           //Número de medições para da média móvel
+#define numReads 15   //Número de medições para a média da base
+#define numFiles 10  //Número de Arquivos
+Adafruit_BMP085 bmp;
+#define IGN_1 36  /*act1*/
+#define IGN_2 61  /*act2*/
+#define IGN_3 46  /*act3*/
+#define IGN_4 55  /*act4*/
+//=============================================================
+//-----Variáveis Globais-----
+
+bool parachute_deployment = true;
+bool trav = false;
+bool trav_2 = false;
+
+float altitude = 0;                  //Altitude
+float relative_average;             //Média Relativa
+float vet[n] ;                     //Vetor
+float Altbase;                    //Altitude no solo
+float accAltbase = 0;            //Altitude inicial base acumulativa
+float futureTime = 0;           //Future time 1
+float futureTime2 = 0;         //Future time 2
+float Maximum_height;         //Altura máxima
+float previous = 0;          //Altitude anterior
+float moving_average;       //Média móvel
+float vet2[n];             //Vetor 2
+int ledState1 = LOW;      //Led low 1
+int ledState2 = LOW;     //Led low 2
+
+String jFile;
+String title;
+String n_complete;
+
+
+unsigned int allTogether;              //Soma
+unsigned int apogeeDetection = 0;    //Apogee Detction for parachute deployment
+unsigned int complement;            //Valor adicionado
+unsigned int cont;                 //Contador
+unsigned int nameFile;            //Nome do arquivo
+unsigned int n_files;            //Número de arquivos
+unsigned int num = 0;           //Numero correspondente a strings
+unsigned int numberTotal_Text; //Número referente a quantidade de texto
+
+unsigned long previousMillis = 0;  // will store last time LED was updated
+//========================================================================
+
+void setup() {
+  
+  pinMode(IGN_1, OUTPUT);
+  pinMode(IGN_2, OUTPUT);
+  // Open serial communications and wait for port to open:
+  Serial.begin(115200);
+  if (!bmp.begin()) {
+    Serial.println("Could not find a valid BMP085 sensor, check wiring!");
+    while (1) {}
+    while (!Serial) {
+      pinMode(LED_BUILTIN, OUTPUT);
+      ; // wait for serial port to connect. Needed for native USB port only
+    }
+  }
+  // see if the card is present and can be initialized:
+  if (!SD.begin(chipSelect)) {
+    Serial.println("Card failed, or not present");
+    // don't do anything more:
+    while (1);
+  }
+  //==========================================================================
+  //Sensors
+
+  String dataString = "";
+  //dataString += ("Temperature = \t");
+  //dataString += (" Pa \t");
+  //dataString += ("  Pressure = \t");
+  //dataString += (" Pa \t");
+  //dataString += ("  Pressure at sealevel (calculated) = \t");
+  //dataString += (" Pa \t");
+  dataString += ("Height (meters) \t");
+  dataString += ("Relative average \t");
+  dataString += ("Moving average \t");
+  dataString += ("Descent \t");
+  dataString += ("Contador \t");
+  dataString += ("Apogeu \t");
+
+  //============================================================================
+
+  title = "Jaque";
+  nameFile = title.length();
+  n_files = true;
+  numberTotal_Text = 8;
+
+  while (n_files) {
+
+    complement = String(num).length();
+    n_complete = "";
+    allTogether = nameFile + complement;
+
+    for (int i = 0; i < (numberTotal_Text - allTogether); i++) {
+      n_complete = n_complete + "0";
+    }
+    jFile = title + n_complete + String(num) + ".txt";
+    num = num + 1;
+    Serial.println(jFile);
+
+    if (!SD.exists (jFile)) {
+
+      n_files = false;
+      myFile = SD.open(jFile, FILE_WRITE);
+
+      // if the file is available, write to it:
+      if (myFile) {
+        myFile.println(dataString);
+        myFile.close();
+        // print to the serial port too:
+        Serial.println(dataString);
+      }
+      // if the file isn't open, pop up an error:
+      else {
+        Serial.println("error opening datalog.txt");
+      }
+    }
+  }
+
+  //=======================================================================
+
+  for (float k = 0; k < numReads; k++) {
+    accAltbase = accAltbase + bmp.readAltitude();
+  }
+  Altbase = accAltbase / numReads;   //Média das medições do foguete na base
+  Serial.print(Altbase);
+  Serial.println('\t');
+}
+
+//===========================================================================
+
+void loop() {
+
+  float Height = 0;
+  float current_height;
+  String dataString = "";
+  unsigned long currentMillis = millis();
+
+  current_height = bmp.readAltitude() - Altbase; //Transformar altitude em altura
+  dataString += String(current_height);
+  dataString += "\t";
+
+  //===============================================================================
+  //Table
+  //
+  //  Serial.print(bmp.readTemperature() );
+  //  Serial.print('\t');
+  //
+  //  Serial.print( bmp.readPressure()  );
+  //  Serial.print('\t');
+  //  // Calculate altitude assuming 'standard' barometric
+  //  // pressure of 1013.25 millibar = 101325 Pascal
+  //  Serial.print( current_Altitude);
+  //  Serial.print('\t');
+  //
+  //  Serial.print( bmp.readSealevelPressure() );
+  //  Serial.print('\t');
+  //
+  //
+  //  // vary with weather and such. If it is 1015 millibars
+  //  // that is equal to 101500 Pascals.
+  //
+  //  Serial.print( bmp.readAltitude(101500));
+  //  Serial.print('\t');
+
+  //
+  //  Serial.print(current_high);
+  //  Serial.print('\t');
+
+  //=================================================================================
+  //Primeira camada de filtro
+
+  for ( int i = n - 1; i > 0 ; i --) {
+
+    vet[i]  =  vet [i - 1];
+
+  }
+  vet[0] = current_height;
+
+  Height = 0;
+
+  for ( int i = 0; i < n ; i ++) {
+
+    Height = Height + vet [i];
+  }
+  relative_average = Height / n;
+  dataString += String(relative_average);
+  dataString += "\t";
+
+  //===================================================================================
+  //Segunda camada de Fitro
+
+  for ( int i = n - 1; i > 0 ; i --) {
+
+    vet2[i]  =  vet2 [i - 1];
+
+  }
+  vet2[0] = relative_average;
+
+  Height = 0;
+
+  for ( int i = 0; i < n ; i ++) {
+
+    Height = Height + vet2[i];
+  }
+  moving_average = Height / n;
+  dataString += String(moving_average);
+  dataString += "\t";
+
+  //==================================================================================
+  //Apogee detection
+
+  if ( moving_average >= previous ) {
+    cont = 0;
+    dataString += ("1");
+  }
+
+  //adds a point if rocket is descending
+
+  else {
+    cont = cont + 1;
+    dataString += ("0");     //descending
+  }
+
+  dataString += "\t";
+  dataString += String(cont / 100.0);
+  dataString += "\t";
+
+  if (cont >= 10) {
+    parachute_deployment = false;
+    apogeeDetection = 1;
+    dataString += ("1");             //apogee detect
+
+  }
+
+  else {
+    dataString += ("0");
+  }
+  dataString += "\t";
+  previous =  moving_average;
+
+  //==============parachute deployment================
+  // if the LED is off turn it on and vice-versa:
+  if (parachute_deployment == false &&  apogeeDetection == 1) {
+
+    if ( trav == false){
+
+      trav = true;
+     // save the last time you blinked the LED
+      futureTime = currentMillis + interval;
+    }
+    if (currentMillis < futureTime)
+   {
+     
+      ledState1 = HIGH;
+
+    } else {
+      parachute_deployment = true;
+      ledState1 = LOW;
+    }
+  }
+  // set the LED with the ledState of the variable:
+     
+      digitalWrite(IGN_1, ledState1);
+      dataString += String(ledState1);
+
+//==============parachute deployment 2================
+  // if the LED is off turn it on and vice-versa:
+ if (parachute_deployment == false &&  apogeeDetection == 1) {
+
+    if ( trav_2 == false){
+
+      trav_2 = true;
+     // atualizar tempo futuro
+      futureTime = currentMillis + interval;
+    }
+    if (currentMillis < futureTime)
+   {
+      ledState2 = HIGH;
+      //depois do segundo led ligar aciona outro tempo para desligar
+      futureTime2 = currentMillis + interval_2;
+        } else {
+      trav_2 = false;
+      parachute_deployment = true;
+      ledState2 = LOW;
+      }
+      // set the LED with the ledState of the variable:
+     
+      digitalWrite(IGN_2, ledState2);
+      dataString += String(ledState2);
+    
+      if (currentMillis < futureTime2 && trav_2 == true)
+      {
+        ledState2 = LOW;
+      }
+  }
+      digitalWrite(IGN_2, ledState2);
+      dataString += String(ledState2);
+
+  File dataFile = SD.open(jFile, FILE_WRITE);
+
+  // if the file is available, write to it:
+  if (dataFile) {
+    dataFile.println(dataString);
+    dataFile.close();
+    // print to the serial port too:
+    Serial.println(dataString);
+  }
