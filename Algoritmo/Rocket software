@@ -1,10 +1,3 @@
-# rocket-embedded-electronics
-Departamento de eletrônica UFABC ROCKET DESIGN
-//Algoritmo em C++/Arduino baseado no sistema de eletrônica de um foguete modelo, desenvolvido para executar funções em vôo desde como leitura de sensores, 
-armazenamento de dados no SD, detecção do apogeu até o acionamente de parachute e a otimização do sistema de recuperação.
-
-
-
 #include <Adafruit_BMP085.h>
 #include <SPI.h>
 #include <SD.h>
@@ -332,3 +325,9 @@ void loop() {
     // print to the serial port too:
     Serial.println(dataString);
   }
+  // if the file isn't open, pop up an error:
+  else {
+    Serial.println("error opening datalog.txt");
+  }
+
+}
